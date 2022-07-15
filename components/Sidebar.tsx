@@ -8,7 +8,18 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import SearchIcon from "@mui/icons-material/Search";
 import Button from "@mui/material/Button";
 import { signOut } from "firebase/auth";
-import { auth } from "../config/firebase";
+import { auth, db } from "../config/firebase";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import TextField from "@mui/material/TextField";
+import DialogActions from "@mui/material/DialogActions";
+import { useAuthState } from "react-firebase-hooks/auth";
+import { useState } from "react";
+import * as EmailValidator from "email-validator";
+
+import { addDoc, collection } from "firebase/firestore";
 
 const StyledContainer = styled.div`
   height: 100vh;
@@ -55,6 +66,29 @@ const StyledAvatar = styled(Avatar)`
   }
 `;
 const Sidebar = () => {
+  const [loggedInUser, _loading, _error] = useAuthState(auth);
+
+  const [isOpenNewConversationDialog, setIsOpenNewConversationDialog] =
+    useState(false);
+
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const toggleNewConversationDialog = (isOpen: boolean) => {
+    setIsOpenNewConversationDialog(isOpen);
+    if (!isOpen) {
+      setRecipientEmail("");
+    }
+  };
+  const isInvitingSelf = recipientEmail === loggedInUser?.email;
+  const createConversation = async () => {
+    if (!recipientEmail) return;
+    if (EmailValidator.validate(recipientEmail) && !isInvitingSelf) {
+      // add conversation user to db "conversation" collector
+      await addDoc(collection(db, "conversations"), {
+        users: [loggedInUser?.email, recipientEmail],
+      });
+    }
+    setIsOpenNewConversationDialog(false);
+  };
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -65,8 +99,8 @@ const Sidebar = () => {
   return (
     <StyledContainer>
       <StyledHeader>
-        <Tooltip title="USER EMAIL" placement="right">
-          <StyledAvatar></StyledAvatar>
+        <Tooltip title={loggedInUser?.email as string} placement="right">
+          <StyledAvatar src={loggedInUser?.photoURL || ""}></StyledAvatar>
         </Tooltip>
         <div>
           <IconButton>
@@ -84,7 +118,43 @@ const Sidebar = () => {
         <SearchIcon />
         <StyledSearchInput placeholder="Search in conversations"></StyledSearchInput>
       </StyledSearch>
-      <StyledSidebarButton>Start a new conversation</StyledSidebarButton>
+      <StyledSidebarButton
+        onClick={() => {
+          toggleNewConversationDialog(true);
+        }}
+      >
+        Start a new conversation
+      </StyledSidebarButton>
+      <Dialog
+        open={isOpenNewConversationDialog}
+        onClose={() => toggleNewConversationDialog(false)}
+      >
+        <DialogTitle>New Conversation</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Please enter a Google email address for the user wish to chat with
+          </DialogContentText>
+          <TextField
+            autoFocus
+            margin="dense"
+            id="name"
+            label="Email Address"
+            type="email"
+            fullWidth
+            variant="standard"
+            value={recipientEmail}
+            onChange={(e) => setRecipientEmail(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => toggleNewConversationDialog(false)}>
+            Cancel
+          </Button>
+          <Button disabled={!recipientEmail} onClick={createConversation}>
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
     </StyledContainer>
   );
 };
